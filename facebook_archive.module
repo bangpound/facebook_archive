@@ -1,0 +1,318 @@
+<?php
+/**
+ * @file
+ * Code for the Facebook Archive feature.
+ */
+
+include_once 'facebook_archive.features.inc';
+
+/**
+ * Implements hook_entity_info().
+ */
+function facebook_archive_entity_info() {
+  $return = array(
+    'facebook_archive_object' => array(
+      'label' => t('Facebook object'),
+      'plural label' => t('Facebook objects'),
+      'description' => t('An entity type used for Facebook opengraph objects.'),
+      'entity class' => 'FacebookArchiveObject',
+      'controller class' => 'EntityAPIController',
+      'metadata controller class' => 'FacebookArchiveMetadataController',
+      'base table' => 'facebook_archive',
+      'fieldable' => TRUE,
+      'access callback' => 'facebook_archive_object_access',
+      'entity keys' => array(
+        'id' => 'id',
+        'bundle' => 'type',
+      ),
+      // Make use the class' label() and uri() implementation by default.
+      'label callback' => 'entity_class_label',
+      'uri callback' => 'entity_class_uri',
+      'bundles' => array(),
+      'bundle keys' => array(
+        'bundle' => 'type',
+      ),
+      'admin ui' => array(
+        'controller class' => 'FacebookArchiveUIController',
+        'path' => 'admin/content/facebook',
+      ),
+      'module' => 'facebook_archive',
+    ),
+    'facebook_archive_object_type' => array(
+      'label' => t('Facebook archive object type'),
+      'entity class' => 'Entity',
+      'controller class' => 'EntityAPIControllerExportable',
+      'access callback' => 'facebook_archive_object_access',
+      'base table' => 'facebook_archive_type',
+      'fieldable' => FALSE,
+      'bundle of' => 'facebook_archive_object',
+      'exportable' => TRUE,
+      'entity keys' => array(
+        'id' => 'id',
+        'name' => 'name',
+        'label' => 'label',
+      ),
+      'module' => 'facebook_archive',
+      'admin ui' => array(
+        'path' => 'admin/structure/facebook-archive',
+      ),
+    ),
+  );
+
+  $types = db_select('facebook_archive_type', 'fat')
+    ->fields('fat')
+    ->execute()
+    ->fetchAllAssoc('name');
+
+  foreach ($types as $type => $info) {
+    $return['facebook_archive_object']['bundles'][$type] = array(
+      'label' => $info->label,
+      'admin' => array(
+        'path' => 'admin/structure/facebook-archive/manage/%facebook_archive_type',
+        'real path' => 'admin/structure/facebook-archive/manage/' . $type,
+        'bundle argument' => 4,
+        'access arguments' => array('scrape the Facebook page'),
+      ),
+    );
+  }
+  return $return;
+}
+
+function facebook_archive_type_load($type_name) {
+  if (isset($type_name)) {
+    $types = entity_load_multiple_by_name('facebook_archive_object_type', array($type_name));
+    $type = isset($type_name) ? reset($types) : $types;
+    return $type->name;
+  }
+  return FALSE;
+}
+
+function facebook_archive_object_access($op, $type = NULL, $account = NULL) {
+  return user_access('scrape the Facebook page', $account);
+}
+
+/**
+ * Implements hook_fboauth_actions().
+ */
+function facebook_archive_fboauth_actions() {
+  $actions['facebook_archive_page_feed'] = array(
+    'title' => t('Authorize this site to download posts from the FIERCE Facebook page.'),
+    'callback' => 'facebook_archive_fboauth_action_page_feed',
+    'permissions' => array(
+      'manage_pages',
+    ),
+  );
+  return $actions;
+}
+
+function facebook_archive_fboauth_action_page_feed($app_id, $access_token) {
+  global $user;
+
+  $row = array(
+    'action' => 'facebook_archive_page_feed',
+    'app_id' => $app_id,
+    'access_token' => $access_token,
+    'uid' => $user->uid,
+  );
+
+  $update = db_select('facebook_archive_token')
+    ->condition('uid', $row['uid'])
+    ->condition('action', $row['action'])
+    ->countQuery()
+    ->execute()
+    ->fetchField();
+
+  if (!$update) {
+    drupal_write_record('facebook_archive_token', $row);
+  }
+  else {
+    drupal_write_record('facebook_archive_token', $row, array('action', 'uid'));
+  }
+}
+
+function facebook_archive_permission() {
+  return array(
+    'scrape the Facebook page' => array(
+      'title' => t('scrape the Facebook page'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function facebook_archive_form_user_profile_form_alter(&$form, &$form_state) {
+  $form['facebook_archive_page_feed'] = array(
+    '#markup' => fboauth_action_display('facebook_archive_page_feed'),
+    '#access' => user_access('scrape the Facebook page'),
+  );
+}
+
+/**
+ * Generates the profile type editing form.
+ */
+function facebook_archive_object_form($form, &$form_state, $entity, $op = 'edit', $entity_type) {
+
+  // Add the field related form elements.
+  $form_state['entity'] = $entity;
+  field_attach_form($entity_type, $entity, $form, $form_state);
+
+  $form['entity'] = array(
+    //'#markup' => '<pre>'. check_plain(print_r($entity, TRUE)) .'</pre>',
+  );
+  $form['status'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Visible'),
+    '#default_value' => $entity->status,
+  );
+
+  $form['actions'] = array('#type' => 'actions');
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+    '#weight' => 40,
+  );
+  return $form;
+}
+
+/**
+ * Form API submit callback for the type form.
+ */
+function facebook_archive_object_form_submit(&$form, &$form_state) {
+  $entity = entity_ui_form_submit_build_entity($form, $form_state);
+  // Save and go back.
+  $entity->save();
+  $form_state['redirect'] = 'admin/content/facebook';
+}
+
+function facebook_archive_theme() {
+  return array(
+    'facebook_archive_object' => array(
+      'render element' => 'elements',
+      'template' => 'facebook_archive_object',
+    ),
+  );
+}
+
+/**
+ * A hook_feeds_plugins() declares available Fetcher, Parser or Processor
+ * plugins to Feeds. For an example look at feeds_feeds_plugin(). For exposing
+ * this hook hook_ctools_plugin_api() MUST be implemented, too.
+ *
+ * @see feeds_feeds_plugin()
+ */
+function facebook_archive_feeds_plugins() {
+  $info = array();
+  $info['FacebookArchiveProcessor'] = array(
+    'name' => 'Facebook Archive parser',
+    'description' => 'Produce Facebook Archive objects.',
+    'help' => 'More verbose description here. Will be displayed on processor selection menu.',
+    'handler' => array(
+      'parent' => 'FeedsProcessor',
+      'class' => 'FacebookArchiveProcessor',
+      'file' => 'FacebookArchiveProcessor.inc',
+      'path' => drupal_get_path('module', 'facebook_archive') .'/plugins',
+    ),
+  );
+  return $info;
+}
+
+function facebook_archive_feeds_before_import(FeedsSource $source) {
+  $access_token = db_select('facebook_archive_token', 'fat')
+    ->fields('fat', array('access_token'))
+    ->execute()
+    ->fetchField();
+
+  $importer = $source->importer();
+
+  $config = $source->getConfigFor($importer->fetcher);
+  if (strstr($config['source'], 'access_token') === FALSE) {
+    $config['source'] .= '?access_token='. $access_token;
+    $source->setConfigFor($importer->fetcher, $config);
+    $source->save();
+  }
+}
+
+function facebook_archive_feeds_processor_targets_alter(&$targets, $entity_type, $bundle_name) {
+
+
+  foreach (field_info_instances($entity_type, $bundle_name) as $name => $instance) {
+    $info = field_info_field($name);
+
+    if (in_array($info['type'], array('file', 'image'))) {
+      $targets[$name .':remote'] = array(
+        'name' => check_plain($instance['label']) .' Remote',
+        'callback' => 'facebook_archive_file_feeds_set_target',
+        'description' => t('The @label field of the node.', array('@label' => $instance['label'])),
+        'real_target' => $name,
+      );
+    }
+  }
+}
+
+function facebook_archive_file_feeds_set_target($source, $entity, $target, $value) {
+  if (empty($value)) {
+    return;
+  }
+  module_load_include('inc', 'file');
+
+  // Make sure $value is an array of objects of type FeedsEnclosure.
+  if (!is_array($value)) {
+    $value = array($value);
+  }
+  foreach ($value as $k => $v) {
+    if (!($v instanceof FacebookArchiveFeedsEnclosure)) {
+      if (is_string($v)) {
+        $value[$k] = new FacebookArchiveFeedsEnclosure($v, file_get_mimetype($v));
+      }
+      else {
+        unset($value[$k]);
+      }
+    }
+  }
+  if (empty($value)) {
+    return;
+  }
+
+  $entity_type = $source->importer->processor->entityType();
+
+  // Determine file destination.
+  // @todo This needs review and debugging.
+  list($field_name, ) = explode(':', $target);
+  $instance_info = field_info_instance($entity_type, $field_name, $source->importer->processor->bundle());
+  $info = field_info_field($field_name);
+  $data = array();
+  if (!empty($entity->uid)) {
+    $data[$entity_type] = $entity;
+  }
+  $destination = file_field_widget_uri($info, $instance_info, $data);
+
+  // Populate entity.
+  $i = 0;
+  $field = isset($entity->$field_name) ? $entity->$field_name : array();
+  foreach ($value as $v) {
+    try {
+      $file = $v->getFile($destination);
+    }
+    catch (Exception $e) {
+      watchdog_exception('Feeds', $e, nl2br(check_plain($e)));
+    }
+    if ($file) {
+      $field['und'][$i] = (array)$file;
+      $field['und'][$i]['display'] = 1; // @todo: Figure out how to properly populate this field.
+      if ($info['cardinality'] == 1) {
+        break;
+      }
+      $i++;
+    }
+  }
+  $entity->{$field_name} = $field;
+}
+
+function facebook_archive_preprocess_entity(&$vars, $hook) {
+  if ($vars['entity_type'] == 'facebook_archive_object') {
+    $object = $vars['facebook_archive_object'];
+    $vars['created'] = format_interval(time() - $object->created, 1);
+    $vars['changed'] = format_interval(time() - $object->changed, 1);
+  }
+}
