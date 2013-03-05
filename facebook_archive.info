@@ -6,6 +6,7 @@ php = 5.2.4
 dependencies[] = entity
 dependencies[] = fboauth
 dependencies[] = features
+dependencies[] = feeds
 dependencies[] = feeds_facebook
 dependencies[] = file_entity
 dependencies[] = image
