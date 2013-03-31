@@ -30,9 +30,33 @@ function facebook_archive_views_api() {
  */
 function facebook_archive_default_facebook_archive_object_type() {
   $items = array();
-  $items['link'] = entity_import('facebook_archive_object_type', '{ "name" : "link", "label" : "Link", "weight" : "0", "locked" : "0" }');
-  $items['photo'] = entity_import('facebook_archive_object_type', '{ "name" : "photo", "label" : "Photo", "weight" : "0", "locked" : "0" }');
-  $items['status'] = entity_import('facebook_archive_object_type', '{ "name" : "status", "label" : "Status", "weight" : "0", "locked" : "0" }');
-  $items['video'] = entity_import('facebook_archive_object_type', '{ "name" : "video", "label" : "Video", "weight" : "0", "locked" : "0" }');
+  $items['link'] = entity_import('facebook_archive_object_type', '{
+    "name" : "link",
+    "label" : "Link",
+    "weight" : "0",
+    "locked" : "0",
+    "data" : null
+  }');
+  $items['photo'] = entity_import('facebook_archive_object_type', '{
+    "name" : "photo",
+    "label" : "Photo",
+    "weight" : "0",
+    "locked" : "0",
+    "data" : null
+  }');
+  $items['status'] = entity_import('facebook_archive_object_type', '{
+    "name" : "status",
+    "label" : "Status",
+    "weight" : "0",
+    "locked" : "0",
+    "data" : null
+  }');
+  $items['video'] = entity_import('facebook_archive_object_type', '{
+    "name" : "video",
+    "label" : "Video",
+    "weight" : "0",
+    "locked" : "0",
+    "data" : null
+  }');
   return $items;
 }

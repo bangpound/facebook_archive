@@ -13,7 +13,11 @@ class FacebookArchiveObject extends Entity {
   }
 
   public function view($view_mode = 'full', $langcode = NULL, $page = NULL) {
-    return parent::view($view_mode, $langcode, $page);
+    $build = parent::view($view_mode, $langcode, $page);
+    if (!empty($this->id)) {
+      $build['#contextual_links']['facebook_archive_object'] = array('facebook_archive_object', array($this->id));
+    }
+    return $build;
   }
 }
 

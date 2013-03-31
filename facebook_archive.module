@@ -316,3 +316,17 @@ function facebook_archive_preprocess_entity(&$vars, $hook) {
     $vars['changed'] = format_interval(time() - $object->changed, 1);
   }
 }
+
+function facebook_archive_contextual_links_view_alter(&$element, &$items) {
+
+  // Revise contextual link for display fields.
+  if ($element['#element']['#entity_type'] == 'facebook_archive_object') {
+    list($id, , ) = entity_extract_ids($element['#element']['#entity_type'], $element['#element']['#entity']);
+
+    $element['#links']['facebook_archive_object'] = array(
+      'title' =>  t('Edit'),
+      'href' => 'admin/content/facebook/manage/'. $id,
+    );
+  }
+}
+
